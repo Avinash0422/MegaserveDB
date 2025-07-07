@@ -1,0 +1,436 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<style scoped>
+    /* Light yellow for partner rows */
+    .partner-row {
+        background-color: #ddc883; /* Lighter yellow than table-warning */
+    }
+
+    /* Partner Statistics styling */
+    .partner-section {
+        margin-bottom: 0.5rem;
+        padding: 1rem;
+        border: 1px solid #a6bce8; /* Light gray border */
+        border-radius: 8px;
+        background-color: #f9f9f9; /* Light gray background */
+    }
+    .partner-section h3 {
+        font-weight: bold;
+        color: #1a202c; /* Dark gray for contrast */
+        margin-bottom: 1rem;
+    }
+
+    .table-container {
+        position: relative;
+    }
+
+    .table th, .table td {
+        vertical-align: middle;
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+
+    .divider {
+        border-bottom: 2px solid #dee2e6;
+    }
+
+    .total-row {
+        font-weight: bold;
+        background-color: #e2e8f0; /* Slightly darker gray for total row */
+    }
+</style>
+
+<div class="container-fluid">
+    <h1 class="mt-4 mb-4">Dashboard</h1>
+
+    <!-- Navigation and Filters -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <a href="{{ url_for('jainam.index') }}" class="btn btn-grd-primary">Jainam Data</a>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label for="date_range" class="form-label">Date</label>
+                    <input type="text" id="date_range" name="date_range" class="form-control" placeholder="Select date or range" autocomplete="off" value="{% if default_start_date and default_end_date %}{{ default_start_date }} to {{ default_end_date }}{% elif date_filter %}{{ date_filter }}{% endif %}">
+                </div>
+                <div class="col-md-3">
+                    <label for="user_id" class="form-label">User ID</label>
+                    <select id="user_id" name="user_id" class="form-select">
+                        <option value="">All User IDs</option>
+                        {% for group in grouped_data %}
+                            <option value="{{ group.main.user_id }}" {% if user_id == group.main.user_id %}selected{% endif %}>{{ group.main.user_id }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="partner" class="form-label">Partner</label>
+                    <select id="partner" name="partner" class="form-select">
+                        <option value="">All Partners</option>
+                        {% for partner in partner_stats.keys() %}
+                            <option value="{{ partner }}" {% if partner == request.args.get('partner') %}selected{% endif %}>{{ partner }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="date" class="form-label">Date</label>
+                    <select id="date" name="date" class="form-select">
+                        <option value="">All Dates</option>
+                        {% for date in unique_dates %}
+                            <option value="{{ date }}" {% if date == request.args.get('date') %}selected{% endif %}>{{ date }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Partner Statistics -->
+    <div class="card mb-2">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5>Partner Statistics</h5>
+            <a href="{{ url_for('jainam.export_partner_stats', start_date=default_start_date, end_date=default_end_date, date=date_filter, user_id=user_id, partner=partner) }}" class="btn btn-grd-success" id="export-partner-stats">Export Partner Statistics</a>
+        </div>
+        <div class="card-body table-container" style="overflow-x:auto; max-height: 900px;">
+            <div id="partner-stats">
+                {% for partner, stats in partner_stats.items() %}
+                    <div class="partner-section">
+                        <h3>{{ partner }}</h3>
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>User ID</th>
+                                    <th>Algos</th>
+                                    <th>Allocation</th>
+                                    <th>MTM</th>
+                                    <th>Max Loss</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% set last_date = '' %}
+                                {% set total_allocation = 0 %}
+                                {% set total_mtm = 0 %}
+                                {% set total_max_loss = 0 %}
+                                {% for user in stats.users|sort(attribute='date', reverse=True) %}
+                                    {% if user.date != last_date and last_date %}
+                                        <tr class="divider">
+                                            <td colspan="6"></td>
+                                        </tr>
+                                    {% endif %}
+                                    <tr>
+                                        <td>{{ user.user_id }}</td>
+                                        <td>{{ user.algo }}</td>
+                                        <td>{{ (user.allocation|float)|round(2) }}</td>
+                                        <td>{{ (user.mtm|float)|round(2) }}</td>
+                                        <td>{{ (user.max_loss|float)|round(2) }}</td>
+                                        <td>{{ user.date|default('') }}</td>
+                                    </tr>
+                                    {% set total_allocation = total_allocation + (user.allocation|float) %}
+                                    {% set total_mtm = total_mtm + (user.mtm|float) %}
+                                    {% set total_max_loss = total_max_loss + (user.max_loss|float) %}
+                                    {% set last_date = user.date %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="6" class="text-center">No data available</td>
+                                    </tr>
+                                {% endfor %}
+                                {% if stats.users %}
+                                    <tr class="total-row">
+                                        <td colspan="2"><strong>Total</strong></td>
+                                        <td><strong>{{ total_allocation|round(2) }}</strong></td>
+                                        <td><strong>{{ total_mtm|round(2) }}</strong></td>
+                                        <td><strong>{{ total_max_loss|round(2) }}</strong></td>
+                                        <td></td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- User and Partner Details -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h3><strong>User and Partner Details</strong></h3>
+            <div>
+                <a href="{{ url_for('jainam.export_user_partner_details', start_date=default_start_date, end_date=default_end_date, date=date_filter, user_id=user_id, partner=partner) }}" class="btn btn-grd-success" id="export-user-partner">Export CSV</a>
+                <label for="rows_per_page">Rows per page:</label>
+                <select id="rows_per_page" class="form-select d-inline-block w-auto">
+                    {% for option in [50, 100, 500, 1000] %}
+                        <option value="{{ option }}" {% if rows_per_page == option %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="card-body table-container" style="overflow-x:auto; max-height: 900px;">
+            <table class="table table-striped table-hover" style="min-width: 1200px;">
+                <thead style="position: sticky; top: 0; z-index: 2; background: #fff;">
+                    <tr>
+                        <th>User ID</th>
+                        <th>Alias</th>
+                        <th>Partner</th>
+                        <th>Allocation</th>
+                        <th>MTM</th>
+                        <th>Max Loss</th>
+                        <th>Algos</th>
+                        <th>Broker</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody id="user-partner-table-body">
+                    {% for group in grouped_data|sort(attribute='main.date', reverse=True) %}
+                        <tr>
+                            <td>{{ group.main.user_id }}</td>
+                            <td>{{ group.main.alias }}</td>
+                            <td></td>
+                            <td>{{ (group.main.allocation|default(0)|float)|round(2) }}</td>
+                            <td>{{ (group.main.mtm|default(0)|float)|round(2) }}</td>
+                            <td>{{ (group.main.max_loss|default(0)|float)|round(2) }}</td>
+                            <td>{{ group.main.algo }}</td>
+                            <td>{{ group.main.broker }}</td>
+                            <td>{{ group.main.date }}</td>
+                        </tr>
+                        {% for partner in group.partners|sort(attribute='partner_alias') %}
+                            <tr class="table-warning" data-is-main="false">
+                                <td>{{ partner.user_id }}</td>
+                                <td>{{ group.main.alias }}</td>
+                                <td>{{ partner.partner_alias }}</td>
+                                <td>{{ (partner.allocation|default(0)|float)|round(2) }}</td>
+                                <td>{{ (partner.mtm|default(0)|float)|round(2) }}</td>
+                                <td>{{ (partner.max_loss|default(0)|float)|round(2) }}</td>
+                                <td>{{ partner.algo }}</td>
+                                <td>{{ partner.broker }}</td>
+                                <td>{{ partner.date }}</td>
+                            </tr>
+                        {% endfor %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer">
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center" id="pagination">
+                    <li class="page-item {% if page == 1 %}disabled{% endif %}">
+                        <a class="page-link" href="#" onclick="changePage(1)">First</a>
+                    </li>
+                    <li class="page-item {% if page == 1 %}disabled{% endif %}">
+                        <a class="page-link" href="#" onclick="changePage({{ page - 1 }})">Previous</a>
+                    </li>
+                    {% for p in range(1, total_pages + 1) %}
+                        <li class="page-item {% if p == page %}active{% endif %}">
+                            <a class="page-link" href="#" onclick="changePage({{ p }})">{{ p }}</a>
+                        </li>
+                    {% endfor %}
+                    <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+                        <a class="page-link" href="#" onclick="changePage({{ page + 1 }})">Next</a>
+                    </li>
+                    <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+                        <a class="page-link" href="#" onclick="changePage({{ total_pages }})">Last</a>
+                    </li>
+                </ul>
+            </nav>
+            <p class="text-center mb-0" id="page-info">{{ page }} of {{ total_pages }}</p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        // Debounce function to prevent rapid AJAX calls
+        function debounce(func, wait) {
+            let timeout;
+            return function() {
+                clearTimeout(timeout);
+                timeout = setTimeout(func, wait);
+            };
+        }
+
+        // Update dashboard via AJAX
+        function updateDashboard(page = 1) {
+            const dateRange = document.getElementById('date_range').value.split(' to ');
+            const date_filter = dateRange.length === 1 ? dateRange[0] : '';
+            const start_date = dateRange.length > 1 ? dateRange[0] : '';
+            const end_date = dateRange.length > 1 ? dateRange[1] : '';
+            const user_id = document.getElementById('user_id').value;
+            const partner = document.getElementById('partner').value;
+            const date = document.getElementById('date').value;
+            const rows_per_page = document.getElementById('rows_per_page').value;
+
+            $.ajax({
+                url: "{{ url_for('jainam.dashboard') }}",
+                type: "GET",
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                data: {
+                    start_date: start_date,
+                    end_date: end_date,
+                    date: date_filter || date,
+                    user_id: user_id,
+                    partner: partner,
+                    rows_per_page: rows_per_page,
+                    page: page
+                },
+                success: function(response) {
+                    // Update User and Partner Details table
+                    const tableBody = $('#user-partner-table-body');
+                    tableBody.empty();
+                    if (response.grouped_data && response.grouped_data.length) {
+                        response.grouped_data.forEach(group => {
+                            let html = `<tr>`;
+                            html += `<td>${group.main.user_id}</td>`;
+                            html += `<td>${group.main.alias || ''}</td>`;
+                            html += `<td></td>`;
+                            html += `<td>${parseFloat(group.main.allocation || 0).toFixed(2)}</td>`;
+                            html += `<td>${parseFloat(group.main.mtm || 0).toFixed(2)}</td>`;
+                            html += `<td>${parseFloat(group.main.max_loss || 0).toFixed(2)}</td>`;
+                            html += `<td>${group.main.algo || ''}</td>`;
+                            html += `<td>${group.main.broker || ''}</td>`;
+                            html += `<td>${group.main.date || ''}</td>`;
+                            html += `</tr>`;
+                            group.partners.forEach(partner => {
+                                html += `<tr class="table-warning" data-is-main="false">`;
+                                html += `<td>${partner.user_id}</td>`;
+                                html += `<td>${group.main.alias || ''}</td>`;
+                                html += `<td>${partner.partner_alias || ''}</td>`;
+                                html += `<td>${parseFloat(partner.allocation || 0).toFixed(2)}</td>`;
+                                html += `<td>${parseFloat(partner.mtm || 0).toFixed(2)}</td>`;
+                                html += `<td>${parseFloat(partner.max_loss || 0).toFixed(2)}</td>`;
+                                html += `<td>${partner.algo || ''}</td>`;
+                                html += `<td>${partner.broker || ''}</td>`;
+                                html += `<td>${partner.date || ''}</td>`;
+                                html += `</tr>`;
+                            });
+                            tableBody.append(html);
+                        });
+                    } else {
+                        tableBody.append('<tr><td colspan="9" class="text-center">No data available</td></tr>');
+                    }
+
+                    // Update Partner Statistics
+                    const partnerStats = $('#partner-stats');
+                    partnerStats.empty();
+                    if (response.partner_stats) {
+                        Object.keys(response.partner_stats).forEach(partner => {
+                            const stats = response.partner_stats[partner];
+                            let totalAllocation = 0;
+                            let totalMTM = 0;
+                            let totalMaxLoss = 0;
+                            let html = `<div class="partner-section">`;
+                            html += `<h3>${partner}</h3>`;
+                            html += `<table class="table table-striped table-hover">`;
+                            html += `<thead><tr><th>User ID</th><th>Algos</th><th>Allocation</th><th>MTM</th><th>Max Loss</th><th>Date</th></tr></thead>`;
+                            html += `<tbody>`;
+                            let lastDate = '';
+                            stats.users.sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(user => {
+                                if (user.date !== lastDate && lastDate) {
+                                    html += `<tr class="divider"><td colspan="6"></td></tr>`;
+                                }
+                                html += `<tr>`;
+                                html += `<td>${user.user_id}</td>`;
+                                html += `<td>${user.algo || ''}</td>`;
+                                html += `<td>${parseFloat(user.allocation || 0).toFixed(2)}</td>`;
+                                html += `<td>${parseFloat(user.mtm || 0).toFixed(2)}</td>`;
+                                html += `<td>${parseFloat(user.max_loss || 0).toFixed(2)}</td>`;
+                                html += `<td>${user.date || ''}</td>`;
+                                html += `</tr>`;
+                                totalAllocation += parseFloat(user.allocation || 0);
+                                totalMTM += parseFloat(user.mtm || 0);
+                                totalMaxLoss += parseFloat(user.max_loss || 0);
+                                lastDate = user.date;
+                            });
+                            if (!stats.users.length) {
+                                html += `<tr><td colspan="6" class="text-center">No data available</td></tr>`;
+                            } else {
+                                html += `<tr class="total-row">`;
+                                html += `<td colspan="2"><strong>Total</strong></td>`;
+                                html += `<td><strong>${totalAllocation.toFixed(2)}</strong></td>`;
+                                html += `<td><strong>${totalMTM.toFixed(2)}</strong></td>`;
+                                html += `<td><strong>${totalMaxLoss.toFixed(2)}</strong></td>`;
+                                html += `<td></td>`;
+                                html += `</tr>`;
+                            }
+                            html += `</tbody></table></div>`;
+                            partnerStats.append(html);
+                        });
+                    } else {
+                        partnerStats.append('<div class="partner-section"><p>No partner statistics available</p></div>');
+                    }
+
+                    // Update pagination
+                    const paginationContainer = $('#pagination');
+                    paginationContainer.empty();
+                    const totalPages = response.total_pages || 1;
+                    const currentPage = response.page || 1;
+                    let paginationHtml = '';
+                    paginationHtml += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">`;
+                    paginationHtml += `<a class="page-link" href="#" onclick="changePage(1)"><<</a></li>`;
+                    paginationHtml += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">`;
+                    paginationHtml += `<a class="page-link" href="#" onclick="changePage(${currentPage - 1})"><</a></li>`;
+                    for (let p = 1; p <= totalPages; p++) {
+                        paginationHtml += `<li class="page-item ${p === currentPage ? 'active' : ''}">`;
+                        paginationHtml += `<a class="page-link" href="#" onclick="changePage(${p})">${p}</a></li>`;
+                    }
+                    paginationHtml += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">`;
+                    paginationHtml += `<a class="page-link" href="#" onclick="changePage(${currentPage + 1})">></a></li>`;
+                    paginationHtml += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">`;
+                    paginationHtml += `<a class="page-link" href="#" onclick="changePage(${totalPages})">>></a></li>`;
+                    paginationContainer.append(paginationHtml);
+
+                    // Update page info
+                    $('#page-info').text(`${currentPage} of ${totalPages}`);
+
+                    // Update export links
+                    const queryParams = `start_date=${encodeURIComponent(start_date)}&end_date=${encodeURIComponent(end_date)}&date=${encodeURIComponent(date_filter || date)}&user_id=${encodeURIComponent(user_id)}&partner=${encodeURIComponent(partner)}`;
+                    $('#export-partner-stats').attr('href', "{{ url_for('jainam.export_partner_stats') }}?" + queryParams);
+                    $('#export-user-partner').attr('href', "{{ url_for('jainam.export_user_partner_details') }}?" + queryParams);
+                    $('a[href*="index"]').attr('href', "{{ url_for('jainam.index') }}?" + queryParams);
+                },
+                error: function(xhr) {
+                    alert('Error loading dashboard: ' + (xhr.responseJSON?.error || 'Unknown error'));
+                }
+            });
+        }
+
+        // Handle pagination
+        function changePage(page) {
+            updateDashboard(page);
+        }
+
+        // Handle rows per page change
+        function updateRowsPerPage(value) {
+            document.getElementById('rows_per_page').value = value;
+            updateDashboard();
+        }
+
+        // Initialize Flatpickr and event listeners
+        document.addEventListener('DOMContentLoaded', function () {
+            flatpickr("#date_range", {
+                mode: "range",
+                dateFormat: "Y-m-d",
+                defaultDate: ["{{ default_start_date }}", "{{ default_end_date }}"],
+                onChange: function(selectedDates) {
+                    updateDashboard();
+                }
+            });
+
+            const debouncedUpdateDashboard = debounce(updateDashboard, 300);
+            document.getElementById('user_id').addEventListener('change', debouncedUpdateDashboard);
+            document.getElementById('partner').addEventListener('change', debouncedUpdateDashboard);
+            document.getElementById('date').addEventListener('change', debouncedUpdateDashboard);
+            document.getElementById('rows_per_page').addEventListener('change', function() {
+                updateRowsPerPage(this.value);
+            });
+
+            // Initial load
+            updateDashboard();
+        });
+    </script>
+</div>
+{% endblock %}

@@ -1,0 +1,44 @@
+services:
+  web:
+    build:
+      context: ./app
+      dockerfile: ../Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app
+      - uploads:/app/Uploads
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASSWORD=mst1108
+      - DB_NAME=megaserve
+      - FLASK_ENV=production
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: mst1108
+      MYSQL_DATABASE: megaserve
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+volumes:
+  uploads:
+  db-data:
+
+networks:
+  app-network:
+    driver: bridge
